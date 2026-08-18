@@ -9,8 +9,11 @@ from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.ensemble import RandomForestClassifier
 
+base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+data_path = os.path.join(base_dir, "data", "candidate_job_role_dataset.csv")
+
 # Load data
-df = pd.read_csv("data/candidate_job_role_dataset.csv")
+df = pd.read_csv(data_path)
 
 # Process skills
 df["skills_list"] = df["skills"].apply(
@@ -66,7 +69,8 @@ print("Training model...")
 rf_pipeline.fit(features_all, y_all)
 print("Model trained!")
 
-os.makedirs("models", exist_ok=True)
-joblib.dump(rf_pipeline, "models/rf_model_pipeline.pkl")
-joblib.dump(mlb, "models/mlb_encoder.pkl")
+models_dir = os.path.join(base_dir, "models")
+os.makedirs(models_dir, exist_ok=True)
+joblib.dump(rf_pipeline, os.path.join(models_dir, "rf_model_pipeline.pkl"))
+joblib.dump(mlb, os.path.join(models_dir, "mlb_encoder.pkl"))
 print("Model and MLB encoder saved!")
