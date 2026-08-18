@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Career Path Predictor</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="background-animation"></div>
+    
+    <div class="container fade-in">
+        <header>
+            <h1>Discover Your <span class="highlight">Ideal Career</span></h1>
+            <p>Enter your skills and qualifications to predict your top 3 career paths.</p>
+        </header>
+
+        <form id="predictor-form" class="glass-panel">
+            <div class="input-group">
+                <label for="skills">Skills (Comma separated, e.g., Python, SQL, AWS)</label>
+                <input type="text" id="skills" placeholder="Machine Learning, React, API..." required>
+            </div>
+            
+            <div class="input-group">
+                <label for="qualification">Qualification</label>
+                <select id="qualification" required>
+                    <option value="" disabled selected>Select your highest degree</option>
+                    <option value="Bachelor's in Computer Science">Bachelor's in Computer Science</option>
+                    <option value="Master's in Computer Science">Master's in Computer Science</option>
+                    <option value="Bachelor's in Software Engineering">Bachelor's in Software Engineering</option>
+                    <option value="Master's in Software Engineering">Master's in Software Engineering</option>
+                    <option value="Bachelor's in Information Technology">Bachelor's in Information Technology</option>
+                    <option value="Master's in Data Science">Master's in Data Science</option>
+                    <option value="PhD in Artificial Intelligence">PhD in Artificial Intelligence</option>
+                    <option value="Bachelor's in Game Development">Bachelor's in Game Development</option>
+                    <option value="Bachelor's in Cybersecurity">Bachelor's in Cybersecurity</option>
+                    <option value="Master's in Cybersecurity">Master's in Cybersecurity</option>
+                    <option value="Bachelor's in Design">Bachelor's in Design</option>
+                    <option value="Bachelor's in Graphic Design">Bachelor's in Graphic Design</option>
+                    <option value="Bachelor's in Marketing">Bachelor's in Marketing</option>
+                    <option value="Master's in Business Administration">Master's in Business Administration</option>
+                    <option value="Master's in Human Resources">Master's in Human Resources</option>
+                    <option value="Master's in Finance">Master's in Finance</option>
+                    <option value="Bachelor's in Statistics">Bachelor's in Statistics</option>
+                </select>
+            </div>
+
+            <div class="input-group">
+                <label for="experience_level">Experience Level</label>
+                <select id="experience_level" required>
+                    <option value="" disabled selected>Select level</option>
+                    <option value="Entry">Entry (0-2 years)</option>
+                    <option value="Mid">Mid (3-6 years)</option>
+                    <option value="Senior">Senior (7+ years)</option>
+                </select>
+            </div>
+
+            <button type="submit" id="predict-btn" class="btn">
+                <span class="btn-text">Predict Career Path</span>
+                <span class="loader hidden"></span>
+            </button>
+        </form>
+
+        <div id="results-container" class="results-container hidden">
+            <h2>Your Top Matches</h2>
+            <div id="predictions" class="prediction-cards">
+                <!-- Cards injected via JS -->
+            </div>
+            <button id="reset-btn" class="btn btn-secondary mt-4">Try Again</button>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

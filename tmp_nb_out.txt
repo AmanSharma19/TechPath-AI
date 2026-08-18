@@ -1,0 +1,866 @@
+--- Cell 0 (code) ---
+import pandas as pd
+import numpy as np
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+from collections import Counter
+
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import (
+    OneHotEncoder,
+    MultiLabelBinarizer,
+    LabelEncoder
+)
+
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+
+from sklearn.linear_model import LogisticRegression
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
+
+from sklearn.dummy import DummyClassifier
+
+from sklearn.metrics import (
+    accuracy_score,
+    classification_report,
+    top_k_accuracy_score,
+    confusion_matrix,
+    f1_score
+)
+
+from xgboost import XGBClassifier
+--- Cell 1 (code) ---
+df = pd.read_csv("../data/candidate_job_role_dataset.csv")
+
+print("Dataset shape:", df.shape)
+
+df.head()
+--- Cell 2 (code) ---
+print(df.info())
+--- Cell 3 (code) ---
+print("\nMissing values:")
+print(df.isnull().sum())
+--- Cell 4 (code) ---
+print("\nDuplicate rows:", df.duplicated().sum())
+--- Cell 5 (code) ---
+print("\nColumns:")
+print(df.columns.tolist())
+--- Cell 6 (code) ---
+print("Number of candidates:", len(df))
+print("Number of job roles:", df["job_role"].nunique())
+print("Number of qualifications:", df["qualification"].nunique())
+print("Number of experience levels:", df["experience_level"].nunique())
+print("Number of unique skill combinations:", df["skills"].nunique())
+--- Cell 7 (code) ---
+print("QUALIFICATIONS")
+print(df["qualification"].value_counts())
+--- Cell 8 (code) ---
+print("\nEXPERIENCE LEVEL")
+print(df["experience_level"].value_counts())
+--- Cell 9 (code) ---
+print("\nJOB ROLES")
+print(df["job_role"].value_counts())
+--- Cell 10 (code) ---
+role_counts = df["job_role"].value_counts().sort_values()
+
+plt.figure(figsize=(12, 8))
+
+ax = sns.barplot(
+    x=role_counts.values,
+    y=role_counts.index
+)
+
+ax.bar_label(ax.containers[0])
+
+plt.title("Distribution of Job Roles")
+plt.xlabel("Number of Candidates")
+plt.ylabel("Job Role")
+
+plt.tight_layout()
+plt.show()
+--- Cell 11 (code) ---
+print(df["skills"].head(20).to_string(index=False))
+--- Cell 12 (code) ---
+df["skills_list"] = df["skills"].apply(
+    lambda x: [
+        skill.strip()
+        for skill in str(x).split(",")
+        if skill.strip()
+    ]
+)
+df[["skills", "skills_list"]].head(10)
+--- Cell 13 (code) ---
+all_skills = sorted(
+    set(
+        skill
+        for skill_list in df["skills_list"]
+        for skill in skill_list
+    )
+)
+
+print("Total unique skills:", len(all_skills))
+print("\nSkills:")
+print(all_skills)
+--- Cell 14 (code) ---
+skill_counter = Counter(
+    skill
+    for skill_list in df["skills_list"]
+    for skill in skill_list
+)
+
+skill_frequency = pd.DataFrame(
+    skill_counter.items(),
+    columns=["Skill", "Count"]
+).sort_values(
+    by="Count",
+    ascending=False
+)
+
+skill_frequency.head(20)
+--- Cell 15 (code) ---
+top_skills = skill_frequency.head(20)
+
+plt.figure(figsize=(12, 8))
+
+ax = sns.barplot(
+    data=top_skills,
+    x="Count",
+    y="Skill"
+)
+
+ax.bar_label(ax.containers[0])
+
+plt.title("Top 20 Most Common Skills")
+plt.xlabel("Number of Candidates")
+plt.ylabel("Skill")
+
+plt.tight_layout()
+plt.show()
+--- Cell 16 (code) ---
+df["profile"] = df.apply(
+    lambda row: (
+        tuple(row["skills_list"]),
+        row["qualification"],
+        row["experience_level"],
+    ),
+    axis=1,
+)
+
+unique_profiles = df["profile"].drop_duplicates().reset_index(drop=True)
+
+train_profiles, test_profiles = train_test_split(
+    unique_profiles,
+    test_size=0.20,
+    random_state=42,
+)
+
+train_mask = df["profile"].isin(train_profiles)
+test_mask = df["profile"].isin(test_profiles)
+
+print("Unique profiles:", len(unique_profiles))
+print("Train profiles:", len(train_profiles))
+print("Test profiles:", len(test_profiles))
+print("Profile overlap:", len(set(train_profiles) & set(test_profiles)))
+
+train_skills = df.loc[train_mask, "skills_list"]
+test_skills = df.loc[test_mask, "skills_list"]
+
+mlb = MultiLabelBinarizer()
+
+train_skill_matrix = mlb.fit_transform(train_skills)
+test_skill_matrix = mlb.transform(test_skills)
+
+skill_df_train = pd.DataFrame(
+    train_skill_matrix,
+    columns=mlb.classes_,
+    index=df.index[train_mask],
+)
+
+skill_df_test = pd.DataFrame(
+    test_skill_matrix,
+    columns=mlb.classes_,
+    index=df.index[test_mask],
+)
+
+print("Training skill feature shape:", skill_df_train.shape)
+print("Testing skill feature shape:", skill_df_test.shape)
+
+skill_df_train.head()
+
+--- Cell 17 (code) ---
+train_features = pd.concat(
+    [
+        skill_df_train,
+        df.loc[train_mask, ["qualification", "experience_level"]],
+    ],
+    axis=1,
+)
+
+test_features = pd.concat(
+    [
+        skill_df_test,
+        df.loc[test_mask, ["qualification", "experience_level"]],
+    ],
+    axis=1,
+)
+
+X_train = train_features.reset_index(drop=True)
+X_test = test_features.reset_index(drop=True)
+
+y_train = df.loc[train_mask, "job_role"].reset_index(drop=True)
+y_test = df.loc[test_mask, "job_role"].reset_index(drop=True)
+
+print("X_train shape:", X_train.shape)
+print("X_test shape:", X_test.shape)
+print("y_train shape:", y_train.shape)
+print("y_test shape:", y_test.shape)
+
+--- Cell 18 (code) ---
+skill_columns = skill_df_train.columns.tolist()
+
+categorical_columns = [
+    "qualification",
+    "experience_level"
+]
+
+print("Num skill columns:", len(skill_columns))
+print("Skill columns:", skill_columns[:10])
+
+--- Cell 19 (code) ---
+print("Training samples:", len(X_train))
+print("Testing samples:", len(X_test))
+print("Profile overlap:", len(set(train_profiles) & set(test_profiles)))
+assert len(set(train_profiles) & set(test_profiles)) == 0
+
+--- Cell 20 (code) ---
+preprocessor = ColumnTransformer(
+    transformers=[
+        (
+            "skills",
+            "passthrough",
+            skill_columns
+        ),
+        (
+            "categorical",
+            OneHotEncoder(
+                handle_unknown="ignore"
+            ),
+            categorical_columns
+        )
+    ]
+)
+results = []
+--- Cell 21 (code) ---
+logistic_model = LogisticRegression(
+    max_iter=2000,
+    random_state=42
+)
+
+logistic_pipeline = Pipeline([
+    ("preprocessor", preprocessor),
+    ("model", logistic_model)
+])
+
+logistic_pipeline.fit(X_train, y_train)
+
+y_pred_lr = logistic_pipeline.predict(X_test)
+lr_accuracy = accuracy_score(
+    y_test,
+    y_pred_lr
+)
+
+print(f"Logistic Regression Accuracy: {lr_accuracy:.4f}")
+lr_macro_f1 = f1_score(
+    y_test,
+    y_pred_lr,
+    average="macro"
+)
+lr_weighted_f1 = f1_score(
+    y_test,
+    y_pred_lr,
+    average="weighted"
+)
+
+print(f"Logistic Regression Macro F1: {lr_macro_f1:.4f}")
+print(f"Logistic Regression Weighted F1: {lr_weighted_f1:.4f}")
+print(classification_report(y_test, y_pred_lr))
+
+y_prob_lr = logistic_pipeline.predict_proba(X_test)
+
+lr_top3 = top_k_accuracy_score(
+    y_test,
+    y_prob_lr,
+    k=3,
+    labels=logistic_pipeline.classes_
+)
+
+lr_top5 = top_k_accuracy_score(
+    y_test,
+    y_prob_lr,
+    k=5,
+    labels=logistic_pipeline.classes_
+)
+
+print(f"Logistic Regression Top-3: {lr_top3:.4f}")
+print(f"Logistic Regression Top-5: {lr_top5:.4f}")
+results.append({
+    "Model": "Logistic Regression",
+    "Accuracy": lr_accuracy,
+    "Macro F1": lr_macro_f1,
+    "Weighted F1": lr_weighted_f1,
+    "Top-3 Accuracy": lr_top3,
+    "Top-5 Accuracy": lr_top5
+})
+
+--- Cell 22 (code) ---
+knn_model = KNeighborsClassifier(
+    n_neighbors=5
+)
+
+knn_pipeline = Pipeline([
+    ("preprocessor", preprocessor),
+    ("model", knn_model)
+])
+
+knn_pipeline.fit(
+    X_train,
+    y_train
+)
+y_pred_knn = knn_pipeline.predict(X_test)
+knn_accuracy = accuracy_score(
+    y_test,
+    y_pred_knn
+)
+
+knn_macro_f1 = f1_score(
+    y_test,
+    y_pred_knn,
+    average="macro"
+)
+knn_weighted_f1 = f1_score(
+    y_test,
+    y_pred_knn,
+    average="weighted"
+)
+
+print(f"KNN Accuracy: {knn_accuracy:.4f}")
+print(f"KNN Macro F1: {knn_macro_f1:.4f}")
+print(f"KNN Weighted F1: {knn_weighted_f1:.4f}")
+
+y_prob_knn = knn_pipeline.predict_proba(X_test)
+
+knn_top3 = top_k_accuracy_score(
+    y_test,
+    y_prob_knn,
+    k=3,
+    labels=knn_pipeline.classes_
+)
+
+knn_top5 = top_k_accuracy_score(
+    y_test,
+    y_prob_knn,
+    k=5,
+    labels=knn_pipeline.classes_
+)
+
+print(f"KNN Top-3 Accuracy: {knn_top3:.4f}")
+print(f"KNN Top-5 Accuracy: {knn_top5:.4f}")
+results.append({
+    "Model": "KNN",
+    "Accuracy": knn_accuracy,
+    "Macro F1": knn_macro_f1,
+    "Weighted F1": knn_weighted_f1,
+    "Top-3 Accuracy": knn_top3,
+    "Top-5 Accuracy": knn_top5
+})
+
+--- Cell 23 (code) ---
+dt_model = DecisionTreeClassifier(
+    random_state=42
+)
+
+dt_pipeline = Pipeline([
+    ("preprocessor", preprocessor),
+    ("model", dt_model)
+])
+
+dt_pipeline.fit(
+    X_train,
+    y_train
+)
+y_pred_dt = dt_pipeline.predict(X_test)
+dt_accuracy = accuracy_score(
+    y_test,
+    y_pred_dt
+)
+
+dt_macro_f1 = f1_score(
+    y_test,
+    y_pred_dt,
+    average="macro"
+)
+dt_weighted_f1 = f1_score(
+    y_test,
+    y_pred_dt,
+    average="weighted"
+)
+
+print(f"Decision Tree Accuracy: {dt_accuracy:.4f}")
+print(f"Decision Tree Macro F1: {dt_macro_f1:.4f}")
+print(f"Decision Tree Weighted F1: {dt_weighted_f1:.4f}")
+y_prob_dt = dt_pipeline.predict_proba(X_test)
+
+dt_top3 = top_k_accuracy_score(
+    y_test,
+    y_prob_dt,
+    k=3,
+    labels=dt_pipeline.classes_
+)
+
+dt_top5 = top_k_accuracy_score(
+    y_test,
+    y_prob_dt,
+    k=5,
+    labels=dt_pipeline.classes_
+)
+
+print(f"Decision Tree Top-3 Accuracy: {dt_top3:.4f}")
+print(f"Decision Tree Top-5 Accuracy: {dt_top5:.4f}")
+results.append({
+    "Model": "Decision Tree",
+    "Accuracy": dt_accuracy,
+    "Macro F1": dt_macro_f1,
+    "Weighted F1": dt_weighted_f1,
+    "Top-3 Accuracy": dt_top3,
+    "Top-5 Accuracy": dt_top5
+})
+
+--- Cell 24 (code) ---
+rf_model = RandomForestClassifier(
+    n_estimators=200,
+    random_state=42,
+    n_jobs=-1
+)
+
+rf_pipeline = Pipeline([
+    ("preprocessor", preprocessor),
+    ("model", rf_model)
+])
+rf_pipeline.fit(
+    X_train,
+    y_train
+)
+y_pred_rf = rf_pipeline.predict(X_test)
+rf_accuracy = accuracy_score(
+    y_test,
+    y_pred_rf
+)
+
+rf_macro_f1 = f1_score(
+    y_test,
+    y_pred_rf,
+    average="macro"
+)
+rf_weighted_f1 = f1_score(
+    y_test,
+    y_pred_rf,
+    average="weighted"
+)
+
+print(f"Random Forest Accuracy: {rf_accuracy:.4f}")
+print(f"Random Forest Macro F1: {rf_macro_f1:.4f}")
+print(f"Random Forest Weighted F1: {rf_weighted_f1:.4f}")
+
+y_prob_rf = rf_pipeline.predict_proba(X_test)
+
+rf_top3 = top_k_accuracy_score(
+    y_test,
+    y_prob_rf,
+    k=3,
+    labels=rf_pipeline.classes_
+)
+
+rf_top5 = top_k_accuracy_score(
+    y_test,
+    y_prob_rf,
+    k=5,
+    labels=rf_pipeline.classes_
+)
+
+print(f"Random Forest Top-3 Accuracy: {rf_top3:.4f}")
+print(f"Random Forest Top-5 Accuracy: {rf_top5:.4f}")
+
+results.append({
+    "Model": "Random Forest",
+    "Accuracy": rf_accuracy,
+    "Macro F1": rf_macro_f1,
+    "Weighted F1": rf_weighted_f1,
+    "Top-3 Accuracy": rf_top3,
+    "Top-5 Accuracy": rf_top5
+})
+
+--- Cell 25 (code) ---
+all_labels = pd.concat([y_train, y_test], ignore_index=True)
+
+label_encoder = LabelEncoder()
+
+y_train_encoded = label_encoder.fit_transform(
+    y_train
+)
+
+y_test_encoded = label_encoder.transform(
+    y_test
+)
+
+xgb_model = XGBClassifier(
+    n_estimators=200,
+    max_depth=6,
+    learning_rate=0.1,
+    random_state=42,
+    n_jobs=-1,
+    eval_metric="mlogloss"
+)
+
+xgb_pipeline = Pipeline([
+    ("preprocessor", preprocessor),
+    ("model", xgb_model)
+])
+
+xgb_pipeline.fit(
+    X_train,
+    y_train_encoded
+)
+
+y_pred_xgb_encoded = xgb_pipeline.predict(
+    X_test
+)
+
+y_pred_xgb = label_encoder.inverse_transform(
+    y_pred_xgb_encoded.astype(int)
+)
+
+xgb_accuracy = accuracy_score(
+    y_test,
+    y_pred_xgb
+)
+
+xgb_macro_f1 = f1_score(
+    y_test,
+    y_pred_xgb,
+    average="macro"
+)
+xgb_weighted_f1 = f1_score(
+    y_test,
+    y_pred_xgb,
+    average="weighted"
+)
+
+print(f"XGBoost Accuracy: {xgb_accuracy:.4f}")
+print(f"XGBoost Macro F1: {xgb_macro_f1:.4f}")
+print(f"XGBoost Weighted F1: {xgb_weighted_f1:.4f}")
+
+y_prob_xgb = xgb_pipeline.predict_proba(
+    X_test
+)
+
+xgb_top3 = top_k_accuracy_score(
+    y_test_encoded,
+    y_prob_xgb,
+    k=3,
+    labels=xgb_pipeline.classes_
+)
+
+xgb_top5 = top_k_accuracy_score(
+    y_test_encoded,
+    y_prob_xgb,
+    k=5,
+    labels=xgb_pipeline.classes_
+)
+
+print(f"XGBoost Top-3 Accuracy: {xgb_top3:.4f}")
+print(f"XGBoost Top-5 Accuracy: {xgb_top5:.4f}")
+
+results.append({
+    "Model": "XGBoost",
+    "Accuracy": xgb_accuracy,
+    "Macro F1": xgb_macro_f1,
+    "Weighted F1": xgb_weighted_f1,
+    "Top-3 Accuracy": xgb_top3,
+    "Top-5 Accuracy": xgb_top5
+})
+
+--- Cell 26 (code) ---
+results_df = pd.DataFrame(results)
+
+results_df = results_df.sort_values(
+    by="Top-3 Accuracy",
+    ascending=False
+).reset_index(drop=True)
+
+results_df
+--- Cell 27 (code) ---
+dummy_model = DummyClassifier(
+    strategy="most_frequent"
+)
+
+dummy_pipeline = Pipeline([
+    ("preprocessor", preprocessor),
+    ("model", dummy_model)
+])
+
+dummy_pipeline.fit(
+    X_train,
+    y_train
+)
+
+dummy_pred = dummy_pipeline.predict(
+    X_test
+)
+
+dummy_accuracy = accuracy_score(
+    y_test,
+    dummy_pred
+)
+
+dummy_macro_f1 = f1_score(
+    y_test,
+    dummy_pred,
+    average="macro"
+)
+dummy_weighted_f1 = f1_score(
+    y_test,
+    dummy_pred,
+    average="weighted"
+)
+
+print(f"Dummy Accuracy: {dummy_accuracy:.4f}")
+print(f"Dummy Macro F1: {dummy_macro_f1:.4f}")
+print(f"Dummy Weighted F1: {dummy_weighted_f1:.4f}")
+
+dummy_prob = dummy_pipeline.predict_proba(
+    X_test
+)
+
+dummy_top3 = top_k_accuracy_score(
+    y_test,
+    dummy_prob,
+    k=3,
+    labels=dummy_pipeline.classes_
+)
+
+dummy_top5 = top_k_accuracy_score(
+    y_test,
+    dummy_prob,
+    k=5,
+    labels=dummy_pipeline.classes_
+)
+
+print(f"Dummy Top-3 Accuracy: {dummy_top3:.4f}")
+print(f"Dummy Top-5 Accuracy: {dummy_top5:.4f}")
+
+results.append({
+    "Model": "DummyClassifier",
+    "Accuracy": dummy_accuracy,
+    "Macro F1": dummy_macro_f1,
+    "Weighted F1": dummy_weighted_f1,
+    "Top-3 Accuracy": dummy_top3,
+    "Top-5 Accuracy": dummy_top5
+})
+
+--- Cell 28 (code) ---
+lr_top5 = top_k_accuracy_score(
+    y_test,
+    y_prob_lr,
+    k=5,
+    labels=logistic_pipeline.classes_
+)
+
+knn_top5 = top_k_accuracy_score(
+    y_test,
+    y_prob_knn,
+    k=5,
+    labels=knn_pipeline.classes_
+)
+
+dt_top5 = top_k_accuracy_score(
+    y_test,
+    y_prob_dt,
+    k=5,
+    labels=dt_pipeline.classes_
+)
+
+rf_top5 = top_k_accuracy_score(
+    y_test,
+    y_prob_rf,
+    k=5,
+    labels=rf_pipeline.classes_
+)
+
+xgb_top5 = top_k_accuracy_score(
+    y_test_encoded,
+    y_prob_xgb,
+    k=5,
+    labels=xgb_pipeline.classes_
+)
+
+print("Logistic Regression Top-5:", round(lr_top5, 4))
+print("KNN Top-5:", round(knn_top5, 4))
+print("Decision Tree Top-5:", round(dt_top5, 4))
+print("Random Forest Top-5:", round(rf_top5, 4))
+print("XGBoost Top-5:", round(xgb_top5, 4))
+--- Cell 29 (code) ---
+dummy_top5 = top_k_accuracy_score(
+    y_test,
+    dummy_prob,
+    k=5,
+    labels=dummy_pipeline.classes_
+)
+
+top5_values = {
+    "Logistic Regression": lr_top5,
+    "KNN": knn_top5,
+    "Decision Tree": dt_top5,
+    "Random Forest": rf_top5,
+    "XGBoost": xgb_top5,
+    "DummyClassifier": dummy_top5
+}
+
+results_df = pd.DataFrame(results)
+results_df["Top-5 Accuracy"] = results_df["Model"].map(
+    top5_values
+)
+
+--- Cell 30 (code) ---
+plt.figure(figsize=(12, 6))
+
+x = np.arange(len(results_df))
+width = 0.25
+
+plt.bar(
+    x - width,
+    results_df["Accuracy"],
+    width,
+    label="Accuracy"
+)
+
+plt.bar(
+    x,
+    results_df["Top-3 Accuracy"],
+    width,
+    label="Top-3 Accuracy"
+)
+
+plt.bar(
+    x + width,
+    results_df["Top-5 Accuracy"],
+    width,
+    label="Top-5 Accuracy"
+)
+
+plt.xticks(
+    x,
+    results_df["Model"],
+    rotation=20
+)
+
+plt.ylabel("Score")
+plt.title("ML Model Performance Comparison")
+plt.legend()
+
+plt.tight_layout()
+plt.show()
+--- Cell 31 (code) ---
+results_df.sort_values(
+    by="Top-3 Accuracy",
+    ascending=False
+)
+results_df.sort_values(
+    by="Macro F1",
+    ascending=False
+)
+--- Cell 32 (code) ---
+print(
+    classification_report(
+        y_test,
+        y_pred_rf
+    )
+)
+--- Cell 33 (code) ---
+cm = confusion_matrix(
+    y_test,
+    y_pred_rf,
+    labels=rf_pipeline.classes_
+)
+
+plt.figure(figsize=(14, 12))
+
+sns.heatmap(
+    cm,
+    annot=True,
+    fmt="d",
+    cmap="Blues",
+    xticklabels=rf_pipeline.classes_,
+    yticklabels=rf_pipeline.classes_
+)
+
+plt.title("Random Forest Confusion Matrix")
+plt.xlabel("Predicted Job Role")
+plt.ylabel("Actual Job Role")
+
+plt.xticks(rotation=90)
+plt.yticks(rotation=0)
+
+plt.tight_layout()
+plt.show()
+--- Cell 34 (code) ---
+feature_names = (
+    rf_pipeline
+    .named_steps["preprocessor"]
+    .get_feature_names_out()
+)
+--- Cell 35 (code) ---
+importances = (
+    rf_pipeline
+    .named_steps["model"]
+    .feature_importances_
+)
+--- Cell 36 (code) ---
+importance_df = pd.DataFrame({
+    "Feature": feature_names,
+    "Importance": importances
+}).sort_values(
+    by="Importance",
+    ascending=False
+)
+importance_df.head(20)
+--- Cell 37 (code) ---
+top_importance = importance_df.head(20)
+
+plt.figure(figsize=(12, 8))
+
+ax = sns.barplot(
+    data=top_importance,
+    x="Importance",
+    y="Feature"
+)
+
+ax.bar_label(
+    ax.containers[0],
+    fmt="%.3f"
+)
+
+plt.title("Top 20 Important Features")
+plt.xlabel("Importance")
+plt.ylabel("Feature")
+
+plt.tight_layout()
+plt.show()
+--- Cell 38 (code) ---
+results_df.sort_values(
+    by=["Macro F1", "Top-3 Accuracy"],
+    ascending=False
+)
